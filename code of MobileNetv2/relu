@@ -158,3 +158,5 @@ def evaluate_model(test_generator, model, classes, title="Performance"):
 # Test the model on the test set
 evaluate_model(test_generator, model, ['bacterial_leaf_blight', 'brown_spot', 'healthy', 'leaf_blast', 'rice_hispa'], title="Performance on Test Data")
 
+
+
