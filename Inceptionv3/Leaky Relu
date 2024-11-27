@@ -36,3 +36,18 @@ else:
     print("Data directory not found. Check if it was extracted to a different path.")
 
 
+
+import os
+
+# Path of the extracted directory (replace with actual directory if different)
+extracted_dir = '/content/rice-leaf-diseases-detection-'
+
+# Check if directory exists and list its contents
+if os.path.exists(extracted_dir):
+    print(f"Contents of '{extracted_dir}':", os.listdir(extracted_dir))
+else:
+    print(f"Directory '{extracted_dir}' not found.")
+
+
+
+
