@@ -37,3 +37,157 @@ else:
 
 # Path of the extracted directory (replace with actual directory if different)
 extracted_dir = '/content/rice-leaf-diseases-detection-'
+
+
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from tensorflow.keras import layers, Model
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.applications import EfficientNetB0, MobileNet
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from scipy.special import softmax
+
+# Directory for the dataset
+data_dir = '/content/rice-leaf-diseases-detection-'  # Update with your dataset directory
+
+# Classes in the dataset
+classes = ['bacterial_leaf_blight', 'brown_spot', 'healthy', 'leaf_blast', 'rice_hispa']
+
+# ImageDataGenerators
+train_datagen = ImageDataGenerator(rescale=1./255)
+val_datagen = ImageDataGenerator(rescale=1./255)
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+# Data generators for training, validation, and testing
+train_generator = train_datagen.flow_from_directory(
+    os.path.join(data_dir, 'train'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=True
+)
+
+val_generator = val_datagen.flow_from_directory(
+    os.path.join(data_dir, 'val'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+test_generator = test_datagen.flow_from_directory(
+    os.path.join(data_dir, 'test'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+# Model 1: EfficientNetB0
+efficientnet_base = EfficientNetB0(weights=None, include_top=False, input_shape=(224, 224, 3))
+inputs1 = layers.Input(shape=(224, 224, 3))
+x1 = efficientnet_base(inputs1, training=True)
+x1 = GlobalAveragePooling2D()(x1)
+x1 = Dense(1024, activation='relu')(x1)
+outputs1 = Dense(5, activation='softmax')(x1)
+efficientnet_model = Model(inputs1, outputs1)
+efficientnet_model.compile(optimizer=Adam(learning_rate=0.0001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+efficientnet_model.summary()
+
+# Model 2: MobileNet
+mobilenet_base = MobileNet(weights=None, include_top=False, input_shape=(224, 224, 3))
+inputs2 = layers.Input(shape=(224, 224, 3))
+x2 = mobilenet_base(inputs2, training=True)
+x2 = GlobalAveragePooling2D()(x2)
+x2 = Dense(1024, activation='relu')(x2)
+outputs2 = Dense(5, activation='softmax')(x2)
+mobilenet_model = Model(inputs2, outputs2)
+mobilenet_model.compile(optimizer=Adam(learning_rate=0.0001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+mobilenet_model.summary()
+
+# Train EfficientNetB0
+history1 = efficientnet_model.fit(train_generator, validation_data=val_generator, epochs=30)
+
+# Train MobileNet
+history2 = mobilenet_model.fit(train_generator, validation_data=val_generator, epochs=30)
+
+# Plot training results for both models
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+plt.plot(history1.history['accuracy'], label='EfficientNet Accuracy')
+plt.plot(history2.history['accuracy'], label='MobileNet Accuracy')
+plt.title('Training Accuracy')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(history1.history['val_accuracy'], label='EfficientNet Validation Accuracy')
+plt.plot(history2.history['val_accuracy'], label='MobileNet Validation Accuracy')
+plt.title('Validation Accuracy')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+# Weighted Soft Voting Ensemble
+def weighted_soft_voting_ensemble(test_generator, model1, model2, weights, classes):
+    """
+    Perform Weighted Soft Voting for ensemble predictions.
+
+    Parameters:
+    - test_generator: Test data generator
+    - model1: First trained model
+    - model2: Second trained model
+    - weights: List of weights for [model1, model2]
+    - classes: List of class names for confusion matrix
+
+    Returns:
+    - None, prints evaluation metrics and confusion matrix
+    """
+    try:
+        # Predict probabilities with both models
+        probs1 = model1.predict(test_generator)  # Shape: (num_samples, num_classes)
+        probs2 = model2.predict(test_generator)  # Shape: (num_samples, num_classes)
+
+        # Debugging: Check the shapes
+        print(f"Model 1 Probabilities Shape: {probs1.shape}")
+        print(f"Model 2 Probabilities Shape: {probs2.shape}")
+
+        # Apply weights to the probabilities
+        weighted_probs = weights[0] * probs1 + weights[1] * probs2
+        weighted_probs = softmax(weighted_probs, axis=1)  # Ensure probabilities sum to 1
+
+        # Compute final predictions by taking the class with the highest weighted probability
+        ensemble_predictions = np.argmax(weighted_probs, axis=1)
+        print(f"Ensemble Predictions: {ensemble_predictions[:10]}")  # Debug first 10 predictions
+
+        # Evaluate metrics
+        precision = precision_score(test_generator.labels, ensemble_predictions, average='weighted')
+        recall = recall_score(test_generator.labels, ensemble_predictions, average='weighted')
+        f1 = f1_score(test_generator.labels, ensemble_predictions, average='weighted')
+        accuracy = accuracy_score(test_generator.labels, ensemble_predictions)
+
+        print("\nWeighted Soft Voting Ensemble Performance")
+        print("Precision:", precision)
+        print("Recall:", recall)
+        print("F1 Score:", f1)
+        print("Accuracy:", accuracy)
+
+        # Confusion matrix
+        confusion = confusion_matrix(test_generator.labels, ensemble_predictions)
+        confusion_df = pd.DataFrame(confusion, index=classes, columns=classes)
+        print("Confusion Matrix:\n", confusion_df)
+
+    except Exception as e:
+        print(f"An error occurred during ensemble evaluation: {e}")
+
+# Assign weights to the models (e.g., 70% EfficientNet, 30% MobileNet)
+weights = [0.7, 0.3]
+
+# Test Weighted Soft Voting Ensemble
+weighted_soft_voting_ensemble(test_generator, efficientnet_model, mobilenet_model, weights, classes)
+
+
