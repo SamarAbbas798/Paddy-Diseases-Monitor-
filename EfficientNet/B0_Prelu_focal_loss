@@ -37,3 +37,8 @@ else:
     print("Data directory not found. Check if it was extracted to a different path.")
 
 
+
+# Path of the extracted directory (replace with actual directory if different)
+extracted_dir = '/content/rice-leaf-diseases-detection-'
+
+
