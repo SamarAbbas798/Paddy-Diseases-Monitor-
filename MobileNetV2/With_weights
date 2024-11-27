@@ -38,3 +38,124 @@ else:
 # Path of the extracted directory (replace with actual directory if different)
 extracted_dir = '/content/rice-leaf-diseases-detection-'
 
+
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras import layers, Model
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import MobileNet
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+
+# Directory for the dataset
+data_dir = '/content/rice-leaf-diseases-detection-'
+
+# Load MobileNet with pre-trained ImageNet weights, excluding the top layers
+base_model = MobileNet(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+
+# Freeze the layers of the base model to prevent training them
+base_model.trainable = False
+
+# Add custom layers on top of the base model
+inputs = tf.keras.Input(shape=(224, 224, 3))
+x = base_model(inputs, training=False)
+x = GlobalAveragePooling2D()(x)
+x = Dense(1024, activation='relu')(x)
+outputs = Dense(10, activation='softmax')(x)  # Adjust the number of classes as needed
+
+# Create the model
+model = Model(inputs, outputs)
+
+# Print the model summary
+model.summary()
+
+# Compile the model
+model.compile(optimizer=Adam(learning_rate=0.0001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+
+# ImageDataGenerators
+train_datagen = ImageDataGenerator(rescale=1./255)
+val_datagen = ImageDataGenerator(rescale=1./255)
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+# Data generators for training, validation, and testing
+train_generator = train_datagen.flow_from_directory(
+    os.path.join(data_dir, 'train'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=True
+)
+
+val_generator = val_datagen.flow_from_directory(
+    os.path.join(data_dir, 'val'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+test_generator = test_datagen.flow_from_directory(
+    os.path.join(data_dir, 'test'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+# Training the model
+history = model.fit(train_generator, epochs=40, validation_data=val_generator)
+
+# Plot training results
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Loss Over Epochs')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Accuracy Over Epochs')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+# Helper function to evaluate the model on given test generator
+def evaluate_model(test_generator, model, classes, title="Performance"):
+    y_test_pred = model.predict(test_generator)
+    y_test_pred = np.argmax(y_test_pred, axis=1)
+
+    precision = precision_score(test_generator.labels, y_test_pred, average='weighted')
+    recall = recall_score(test_generator.labels, y_test_pred, average='weighted')
+    f1 = f1_score(test_generator.labels, y_test_pred, average='weighted')
+    accuracy = accuracy_score(test_generator.labels, y_test_pred)
+
+    print(f"\n{title}")
+    print("Precision:", precision)
+    print("Recall:", recall)
+    print("F1 Score:", f1)
+    print("Accuracy:", accuracy)
+
+    # Display the confusion matrix
+    confusion = confusion_matrix(test_generator.labels, y_test_pred)
+    confusion_df = pd.DataFrame(confusion, index=classes, columns=classes)
+    print("Confusion Matrix:\n", confusion_df)
+
+# Test the model on the test set
+evaluate_model(test_generator, model, ['bacterial_leaf_blight', 'brown_spot', 'healthy', 'leaf_blast', 'rice_hispa'], title="Performance on Test Data")
+
+
+
+
+
