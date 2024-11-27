@@ -56,4 +56,100 @@ extracted_dir = '/content/rice-leaf-diseases-detection-'
 
 
 
+# Import necessary libraries
+import tensorflow as tf
+from tensorflow.keras.layers import (
+    Conv2D, MaxPooling2D, AveragePooling2D, Flatten, Dense, Dropout, BatchNormalization, LeakyReLU, Input
+)
+from tensorflow.keras.models import Model
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import os
+
+# Custom Inception Block with LeakyReLU
+def inception_block(x, filters):
+    f1, f3r, f3, f5r, f5, proj = filters
+
+    # 1x1 Convolution
+    conv1 = Conv2D(f1, (1, 1), padding='same')(x)
+    conv1 = BatchNormalization()(conv1)
+    conv1 = LeakyReLU(alpha=0.01)(conv1)
+
+    # 1x1 followed by 3x3 Convolution
+    conv3 = Conv2D(f3r, (1, 1), padding='same')(x)
+    conv3 = BatchNormalization()(conv3)
+    conv3 = LeakyReLU(alpha=0.01)(conv3)
+    conv3 = Conv2D(f3, (3, 3), padding='same')(conv3)
+    conv3 = BatchNormalization()(conv3)
+    conv3 = LeakyReLU(alpha=0.01)(conv3)
+
+    # 1x1 followed by 5x5 Convolution
+    conv5 = Conv2D(f5r, (1, 1), padding='same')(x)
+    conv5 = BatchNormalization()(conv5)
+    conv5 = LeakyReLU(alpha=0.01)(conv5)
+    conv5 = Conv2D(f5, (5, 5), padding='same')(conv5)
+    conv5 = BatchNormalization()(conv5)
+    conv5 = LeakyReLU(alpha=0.01)(conv5)
+
+    # 3x3 MaxPooling followed by 1x1 Convolution
+    pool = MaxPooling2D((3, 3), strides=(1, 1), padding='same')(x)
+    pool = Conv2D(proj, (1, 1), padding='same')(pool)
+    pool = BatchNormalization()(pool)
+    pool = LeakyReLU(alpha=0.01)(pool)
+
+    # Concatenate all branches
+    output = tf.keras.layers.concatenate([conv1, conv3, conv5, pool])
+    return output
+
+# Custom InceptionV3 Model
+def custom_inception_v3(input_shape=(224, 224, 3), num_classes=5):
+    inputs = Input(shape=input_shape)
+
+    # Initial Layers
+    x = Conv2D(32, (3, 3), strides=(2, 2), padding='valid')(inputs)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.01)(x)
+    x = Conv2D(32, (3, 3), padding='valid')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.01)(x)
+    x = Conv2D(64, (3, 3), padding='same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.01)(x)
+    x = MaxPooling2D((3, 3), strides=(2, 2))(x)
+
+    # Inception Blocks
+    x = inception_block(x, [64, 48, 64, 64, 96, 32])
+    x = inception_block(x, [64, 48, 64, 64, 96, 64])
+    x = MaxPooling2D((3, 3), strides=(2, 2))(x)
+
+    x = inception_block(x, [128, 96, 128, 96, 128, 128])
+    x = inception_block(x, [128, 96, 128, 96, 128, 128])
+    x = MaxPooling2D((3, 3), strides=(2, 2))(x)
+
+    # Fully Connected Layers
+    x = Flatten()(x)
+    x = Dense(1024)(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.01)(x)
+    x = Dropout(0.5)(x)
+
+    x = Dense(num_classes, activation='softmax')(x)
+
+    model = Model(inputs, x)
+
+    # Compile Model
+    model.compile(optimizer=Adam(learning_rate=0.00001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+    return model
+
+# Instantiate the Model
+model = custom_inception_v3(input_shape=(224, 224, 3), num_classes=5)
+model.summary()
+
+
 
