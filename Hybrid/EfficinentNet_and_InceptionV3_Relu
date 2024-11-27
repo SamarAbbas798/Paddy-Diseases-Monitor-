@@ -50,3 +50,169 @@ else:
 
 
 
+
+
+
+
+
+
+# Import required libraries
+import os
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras import layers
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+)
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Set random seeds
+np.random.seed(42)
+tf.random.set_seed(42)
+
+# Dataset directory
+data_dir = '/content/rice-leaf-diseases-detection-'
+
+# Custom Inception-like architecture
+def create_inception_model(input_shape=(224, 224, 3), num_classes=5):
+    model = Sequential([
+        layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=input_shape),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
+        layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
+        layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.GlobalAveragePooling2D(),
+        layers.Dense(256, activation='relu'),
+        layers.Dropout(0.5),
+        layers.Dense(num_classes, activation='softmax')
+    ])
+    return model
+
+# Custom EfficientNet-like architecture
+def create_efficientnet_model(input_shape=(224, 224, 3), num_classes=5):
+    model = Sequential([
+        layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=input_shape),
+        layers.BatchNormalization(),
+        layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
+        layers.Conv2D(128, (3, 3), activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.Conv2D(256, (3, 3), activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.GlobalAveragePooling2D(),
+        layers.Dense(256, activation='relu'),
+        layers.Dropout(0.5),
+        layers.Dense(num_classes, activation='softmax')
+    ])
+    return model
+
+# Create models
+inception_model = create_inception_model()
+efficientnet_model = create_efficientnet_model()
+
+# Compile models
+inception_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+                        loss='sparse_categorical_crossentropy',
+                        metrics=['accuracy'])
+efficientnet_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+                           loss='sparse_categorical_crossentropy',
+                           metrics=['accuracy'])
+
+# ImageDataGenerators
+datagen = ImageDataGenerator(rescale=1./255)
+
+train_generator = datagen.flow_from_directory(
+    os.path.join(data_dir, 'train'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=True
+)
+
+val_generator = datagen.flow_from_directory(
+    os.path.join(data_dir, 'val'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+test_generator = datagen.flow_from_directory(
+    os.path.join(data_dir, 'test'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+# Train both models
+print("Training Inception-like model...")
+history_inception = inception_model.fit(train_generator, epochs=10, validation_data=val_generator)
+
+print("Training EfficientNet-like model...")
+history_efficientnet = efficientnet_model.fit(train_generator, epochs=10, validation_data=val_generator)
+
+# Function to evaluate and get predictions
+def get_predictions(model, generator):
+    predictions = model.predict(generator)
+    predicted_labels = np.argmax(predictions, axis=1)
+    return predictions, predicted_labels
+
+# Ensemble model predictions
+def ensemble_predictions(generator, models, weights=None):
+    predictions = [model.predict(generator) for model in models]
+    if weights:
+        predictions = [pred * w for pred, w in zip(predictions, weights)]
+    avg_predictions = np.mean(predictions, axis=0)
+    predicted_labels = np.argmax(avg_predictions, axis=1)
+    return avg_predictions, predicted_labels
+
+# Evaluate ensemble
+def evaluate_ensemble(generator, true_labels, predicted_labels, classes, title="Ensemble Performance"):
+    precision = precision_score(true_labels, predicted_labels, average='weighted')
+    recall = recall_score(true_labels, predicted_labels, average='weighted')
+    f1 = f1_score(true_labels, predicted_labels, average='weighted')
+    accuracy = accuracy_score(true_labels, predicted_labels)
+
+    print(f"\n{title}")
+    print("Precision:", precision)
+    print("Recall:", recall)
+    print("F1 Score:", f1)
+    print("Accuracy:", accuracy)
+
+    # Confusion matrix
+    confusion = confusion_matrix(true_labels, predicted_labels)
+    confusion_df = pd.DataFrame(confusion, index=classes, columns=classes)
+    print("Confusion Matrix:\n", confusion_df)
+
+    # Plot confusion matrix as heatmap
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(confusion_df, annot=True, fmt='d', cmap='Blues')
+    plt.title(f'Confusion Matrix: {title}')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.show()
+
+# Test data evaluation
+true_labels = test_generator.labels
+
+# Predictions for individual models
+_, inception_pred_labels = get_predictions(inception_model, test_generator)
+_, efficientnet_pred_labels = get_predictions(efficientnet_model, test_generator)
+
+# Ensemble predictions (simple average)
+ensemble_avg_predictions, ensemble_pred_labels = ensemble_predictions(test_generator, [inception_model, efficientnet_model])
+
+# Evaluate the ensemble
+evaluate_ensemble(test_generator, true_labels, ensemble_pred_labels,
+                  ['bacterial_leaf_blight', 'brown_spot', 'healthy', 'leaf_blast', 'rice_hispa'], title="Ensemble Performance")
+
+
