@@ -38,3 +38,145 @@ else:
 extracted_dir = '/content/rice-leaf-diseases-detection-'
 
 
+# Import libraries
+import tensorflow as tf
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, GlobalAveragePooling2D, Dense, Dropout, Concatenate, BatchNormalization, Activation
+from tensorflow.keras.models import Model
+
+# Define the input shape and number of classes
+input_shape = (224, 224, 3)
+num_classes = 5  # Change based on your dataset
+
+# Function to build Inception-ResNet v2 from scratch
+def build_inception_resnet_v2(input_tensor):
+    x = Conv2D(32, (3, 3), strides=(2, 2), padding="valid")(input_tensor)
+    x = BatchNormalization()(x)
+    x = Activation("relu")(x)
+    x = Conv2D(32, (3, 3), padding="valid")(x)
+    x = BatchNormalization()(x)
+    x = Activation("relu")(x)
+    x = Conv2D(64, (3, 3), padding="same")(x)
+    x = BatchNormalization()(x)
+    x = Activation("relu")(x)
+    x = MaxPooling2D((3, 3), strides=(2, 2))(x)
+
+    # Additional convolutional blocks (simplified for brevity)
+    for _ in range(3):
+        x = Conv2D(128, (3, 3), padding="same")(x)
+        x = BatchNormalization()(x)
+        x = Activation("relu")(x)
+
+    x = GlobalAveragePooling2D()(x)
+    return x
+
+# Function to build MobileNet v2 from scratch
+def build_mobilenet_v2(input_tensor):
+    x = Conv2D(32, (3, 3), strides=(2, 2), padding="same")(input_tensor)
+    x = BatchNormalization()(x)
+    x = Activation("relu")(x)
+
+    # Additional convolutional blocks (simplified for brevity)
+    for _ in range(3):
+        x = Conv2D(64, (3, 3), padding="same")(x)
+        x = BatchNormalization()(x)
+        x = Activation("relu")(x)
+
+    x = GlobalAveragePooling2D()(x)
+    return x
+
+# Input layer
+inputs = Input(shape=input_shape)
+
+# Feature extraction from Inception-ResNet v2
+inception_features = build_inception_resnet_v2(inputs)
+
+# Feature extraction from MobileNet v2
+mobilenet_features = build_mobilenet_v2(inputs)
+
+# Feature fusion (concatenation)
+combined_features = Concatenate()([inception_features, mobilenet_features])
+
+# Fully connected layers for classification
+x = Dense(512, activation='relu')(combined_features)
+x = Dropout(0.5)(x)
+x = Dense(256, activation='relu')(x)
+x = Dropout(0.5)(x)
+outputs = Dense(num_classes, activation='softmax')(x)
+
+# Build and compile the model
+tribreed_model = Model(inputs, outputs)
+tribreed_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+                       loss='sparse_categorical_crossentropy',
+                       metrics=['accuracy'])
+
+# Model summary
+tribreed_model.summary()
+
+# Dataset directories (adjust paths accordingly)
+data_dir = '/content/rice-leaf-diseases-detection-'  # Replace with your dataset path
+
+# Image data generators
+train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1./255)
+val_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1./255)
+test_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1./255)
+
+# Data generators
+train_generator = train_datagen.flow_from_directory(
+    directory=f"{data_dir}/train",
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=True
+)
+
+val_generator = val_datagen.flow_from_directory(
+    directory=f"{data_dir}/val",
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+test_generator = test_datagen.flow_from_directory(
+    directory=f"{data_dir}/test",
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+# Train the model
+history = tribreed_model.fit(
+    train_generator,
+    validation_data=val_generator,
+    epochs=40
+)
+
+# Evaluate the model
+test_loss, test_accuracy = tribreed_model.evaluate(test_generator)
+print(f"Test Accuracy: {test_accuracy:.4f}")
+
+# Plot training results
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Loss Over Epochs')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Accuracy Over Epochs')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+
