@@ -4,3 +4,33 @@ K.clear_session()
 
 !pip install rarfile
 
+
+import os
+import gdown
+import rarfile
+
+# Download file again in case it wasn't extracted correctly
+file_id = '1dyorpmEWOBd2V0b9UNwkJm3EDvLJU1FE'
+url = f'https://drive.google.com/uc?id={file_id}'
+output_rar = '/content/rice-leaf-diseases5c.rar'
+
+# Download the RAR file
+gdown.download(url, output_rar, quiet=False)
+
+# Verify and extract the RAR file
+extracted_path = '/content/rice-leaf-diseases5c'
+if rarfile.is_rarfile(output_rar):
+    with rarfile.RarFile(output_rar, 'r') as rar_ref:
+        rar_ref.extractall('/content')
+    print("Extraction successful.")
+else:
+    print("The downloaded file is not a valid RAR file.")
+
+# List contents of /content to check if extraction worked as expected
+print("Contents of /content after extraction:", os.listdir('/content'))
+
+# Check if the expected data directory now exists
+if os.path.exists(extracted_path):
+    print("Data directory found:", extracted_path)
+else:
+    print("Data directory not found. Check if it was extracted to a different path.")
