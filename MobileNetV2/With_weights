@@ -35,6 +35,10 @@ else:
     print("Data directory not found. Check if it was extracted to a different path.")
 
 
+# Path of the extracted directory (replace with actual directory if different)
+extracted_dir = '/content/rice-leaf-diseases-detection-'
+
+
 import os
 import numpy as np
 import pandas as pd
@@ -150,6 +154,8 @@ def evaluate_model(test_generator, model, classes, title="Performance"):
 
 # Test the model on the test set
 evaluate_model(test_generator, model, ['bacterial_leaf_blight', 'brown_spot', 'healthy', 'leaf_blast', 'rice_hispa'], title="Performance on Test Data")
+
+
 
 
 
