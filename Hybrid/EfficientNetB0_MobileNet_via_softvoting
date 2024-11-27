@@ -42,3 +42,139 @@ extracted_dir = '/content/rice-leaf-diseases-detection-'
 
 
 
+
+
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras import layers, Model
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import EfficientNetB0, MobileNet
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+
+# Directory for the dataset
+data_dir = '/content/rice-leaf-diseases-detection-'
+
+# EfficientNetB0 Model (from scratch)
+efficientnet_base = EfficientNetB0(weights=None, include_top=False, input_shape=(224, 224, 3))
+inputs1 = tf.keras.Input(shape=(224, 224, 3))
+x1 = efficientnet_base(inputs1, training=True)  # Trainable base
+x1 = GlobalAveragePooling2D()(x1)
+x1 = Dense(1024, activation='relu')(x1)
+outputs1 = Dense(5, activation='softmax')(x1)
+efficientnet_model = Model(inputs1, outputs1)
+efficientnet_model.compile(optimizer=Adam(learning_rate=0.0001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# MobileNet Model (from scratch)
+mobilenet_base = MobileNet(weights=None, include_top=False, input_shape=(224, 224, 3))
+inputs2 = tf.keras.Input(shape=(224, 224, 3))
+x2 = mobilenet_base(inputs2, training=True)  # Trainable base
+x2 = GlobalAveragePooling2D()(x2)
+x2 = Dense(1024, activation='relu')(x2)
+outputs2 = Dense(5, activation='softmax')(x2)
+mobilenet_model = Model(inputs2, outputs2)
+mobilenet_model.compile(optimizer=Adam(learning_rate=0.0001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# ImageDataGenerators
+train_datagen = ImageDataGenerator(rescale=1./255)
+val_datagen = ImageDataGenerator(rescale=1./255)
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+# Data generators for training, validation, and testing
+train_generator = train_datagen.flow_from_directory(
+    os.path.join(data_dir, 'train'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=True
+)
+
+val_generator = val_datagen.flow_from_directory(
+    os.path.join(data_dir, 'val'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+test_generator = test_datagen.flow_from_directory(
+    os.path.join(data_dir, 'test'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+# Train EfficientNetB0
+print("\nTraining EfficientNetB0...")
+efficientnet_history = efficientnet_model.fit(train_generator, epochs=40, validation_data=val_generator)
+
+# Train MobileNet
+print("\nTraining MobileNet...")
+mobilenet_history = mobilenet_model.fit(train_generator, epochs=40, validation_data=val_generator)
+
+# Ensemble using Soft Voting
+def soft_voting_ensemble(test_generator, model1, model2, classes):
+    # Get predictions from both models
+    predictions1 = model1.predict(test_generator)
+    predictions2 = model2.predict(test_generator)
+
+    # Perform soft voting (average probabilities)
+    ensemble_predictions = (predictions1 + predictions2) / 2
+    final_predictions = np.argmax(ensemble_predictions, axis=1)
+
+    # Evaluate metrics
+    precision = precision_score(test_generator.labels, final_predictions, average='weighted')
+    recall = recall_score(test_generator.labels, final_predictions, average='weighted')
+    f1 = f1_score(test_generator.labels, final_predictions, average='weighted')
+    accuracy = accuracy_score(test_generator.labels, final_predictions)
+
+    print("\nSoft Voting Ensemble Performance")
+    print("Precision:", precision)
+    print("Recall:", recall)
+    print("F1 Score:", f1)
+    print("Accuracy:", accuracy)
+
+    # Confusion matrix
+    confusion = confusion_matrix(test_generator.labels, final_predictions)
+    confusion_df = pd.DataFrame(confusion, index=classes, columns=classes)
+    print("Confusion Matrix:\n", confusion_df)
+
+# Classes for confusion matrix
+classes = ['bacterial_leaf_blight', 'brown_spot', 'healthy', 'leaf_blast', 'rice_hispa']
+
+# Test Ensemble Model
+soft_voting_ensemble(test_generator, efficientnet_model, mobilenet_model, classes)
+
+# Plot Training Results
+def plot_training_results(history, title):
+    plt.figure(figsize=(12, 5))
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.title(f'{title} Loss Over Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['accuracy'], label='Training Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+    plt.title(f'{title} Accuracy Over Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+# Plot results for both models
+plot_training_results(efficientnet_history, "EfficientNetB0")
+plot_training_results(mobilenet_history, "MobileNet")
+
+
+
