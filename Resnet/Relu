@@ -1,2 +1,27 @@
 from tensorflow.keras import backend as K
 K.clear_session()
+
+
+
+!pip install rarfile
+
+import os
+import gdown
+import rarfile
+from PIL import Image
+
+# Extracted file ID from Google Drive link
+file_id = '1fOFS9igMw1Vo8n64IZBBJHp2NXFi_tT3'
+url = f'https://drive.google.com/uc?id={file_id}'  # Correct download link format
+output_rar = '/content/preprocess_data.rar'
+
+# Download the RAR file
+gdown.download(url, output_rar, quiet=False)
+
+# Verify and extract the RAR file
+if rarfile.is_rarfile(output_rar):
+    with rarfile.RarFile(output_rar, 'r') as rar_ref:
+        rar_ref.extractall('/content')
+    print("Extraction successful.")
+else:
+    print("The downloaded file is not a valid RAR file.")
