@@ -25,3 +25,69 @@ if rarfile.is_rarfile(output_rar):
     print("Extraction successful.")
 else:
     print("The downloaded file is not a valid RAR file.")
+
+
+
+
+
+# Path to the directory where the RAR file was extracted
+data_dir = '/content/preprocessed_data'
+
+
+
+from keras.models import Model
+from keras.layers import Input, Conv2D, MaxPooling2D, BatchNormalization, Add, AveragePooling2D, Flatten, Dense, LeakyReLU
+from tensorflow.keras.optimizers import Adam
+
+# Define the Residual Block with Leaky ReLU
+def residual_block(x, filters, downsample=False):
+    shortcut = x
+    stride = 1
+    if downsample:
+        shortcut = Conv2D(filters, (1, 1), strides=2, padding='same')(shortcut)
+        shortcut = BatchNormalization()(shortcut)
+        stride = 2
+
+    x = Conv2D(filters, (3, 3), strides=stride, padding='same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.01)(x)
+
+    x = Conv2D(filters, (3, 3), padding='same')(x)
+    x = BatchNormalization()(x)
+
+    x = Add()([x, shortcut])
+    x = LeakyReLU(alpha=0.01)(x)
+    return x
+
+# Define the ResNet model with Leaky ReLU
+def build_resnet(input_shape=(224, 224, 3), num_classes=5):
+    inputs = Input(shape=input_shape)
+
+    # Initial convolutional layer
+    x = Conv2D(64, (7, 7), strides=2, padding='same')(inputs)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.01)(x)
+    x = MaxPooling2D((3, 3), strides=2, padding='same')(x)
+
+    # Stack of residual blocks with consistent filter sizes
+    x = residual_block(x, 64)
+    x = residual_block(x, 128, downsample=True)
+    x = residual_block(x, 128)
+    x = residual_block(x, 256, downsample=True)
+    x = residual_block(x, 256)
+    x = residual_block(x, 512, downsample=True)
+    x = residual_block(x, 512)
+
+    # Global average pooling and output layer
+    x = AveragePooling2D((7, 7))(x)
+    x = Flatten()(x)
+    outputs = Dense(num_classes, activation='softmax')(x)
+
+    model = Model(inputs, outputs)
+    model.compile(optimizer=Adam(learning_rate=0.0001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+# Instantiate and summarize the model with Leaky ReLU
+model = build_resnet(num_classes=5)
+model.summary()
+
