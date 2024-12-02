@@ -42,3 +42,160 @@ else:
 extracted_dir = '/content/rice-leaf-diseases-detection-'
 
 
+
+import os
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras import layers, Model
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense, Concatenate, PReLU
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+import matplotlib.pyplot as plt
+import pandas as pd
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+
+# Directory for the dataset
+data_dir = '/content/rice-leaf-diseases-detection-'  # Update with your dataset path
+
+# Function to create InceptionV3 from scratch (only base part for feature extraction)
+def inceptionv3_base(input_shape=(224, 224, 3)):
+    inputs = layers.Input(shape=input_shape)
+
+    # Initial Conv Layers (first few layers of InceptionV3)
+    x = layers.Conv2D(32, (3, 3), strides=(2, 2), padding='valid', activation=None)(inputs)
+    x = PReLU()(x)
+    x = layers.Conv2D(32, (3, 3), padding='valid', activation=None)(x)
+    x = PReLU()(x)
+    x = layers.Conv2D(64, (3, 3), padding='same', activation=None)(x)
+    x = PReLU()(x)
+    x = layers.MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='valid')(x)
+
+    # Rest of the InceptionV3 blocks (simplified)
+    x = layers.Conv2D(80, (1, 1), padding='valid', activation=None)(x)
+    x = PReLU()(x)
+    x = layers.Conv2D(192, (3, 3), padding='valid', activation=None)(x)
+    x = PReLU()(x)
+    x = layers.MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='valid')(x)
+
+    # Add additional inception blocks or custom blocks as needed
+    x = GlobalAveragePooling2D()(x)
+    return Model(inputs, x)
+
+# Function to create MobileNetV2 Base
+def mobilenetv2_base(input_shape=(224, 224, 3)):
+    mobilenet = MobileNetV2(input_shape=input_shape, weights='imagenet', include_top=False)
+    x = GlobalAveragePooling2D()(mobilenet.output)
+    return Model(inputs=mobilenet.input, outputs=x)
+
+# Build the InceptionV3 feature extraction part
+inception_base = inceptionv3_base(input_shape=(224, 224, 3))
+
+# Build the MobileNetV2 feature extraction part
+mobilenetv2_base_model = mobilenetv2_base(input_shape=(224, 224, 3))
+
+# Combine the features extracted from both models
+inputs = layers.Input(shape=(224, 224, 3))
+
+# Extract features from InceptionV3
+inception_features = inception_base(inputs)
+
+# Extract features from MobileNetV2
+mobilenet_features = mobilenetv2_base_model(inputs)
+
+# Concatenate the features from both models
+x = Concatenate()([inception_features, mobilenet_features])
+
+# Fully connected layers after feature extraction
+x = Dense(1024)(x)
+x = PReLU()(x)
+outputs = Dense(5, activation='softmax')(x)  # Adjust for your number of classes
+
+# Create the hybrid model
+hybrid_model = Model(inputs, outputs)
+
+# Print the hybrid model summary
+hybrid_model.summary()
+
+# Compile the hybrid model
+hybrid_model.compile(optimizer=Adam(learning_rate=0.0001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# ImageDataGenerators for loading the dataset
+train_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
+val_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
+test_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
+
+# Data generators for training, validation, and testing
+train_generator = train_datagen.flow_from_directory(
+    os.path.join(data_dir, 'train'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=True
+)
+
+val_generator = val_datagen.flow_from_directory(
+    os.path.join(data_dir, 'val'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+test_generator = test_datagen.flow_from_directory(
+    os.path.join(data_dir, 'test'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+# Training the hybrid model
+history = hybrid_model.fit(train_generator, epochs=50, validation_data=val_generator)
+
+# Plot training results
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Loss Over Epochs')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Accuracy Over Epochs')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+# Helper function to evaluate the hybrid model on test data
+def evaluate_model(test_generator, model, classes, title="Performance"):
+    y_test_pred = model.predict(test_generator)
+    y_test_pred = np.argmax(y_test_pred, axis=1)
+
+    precision = precision_score(test_generator.labels, y_test_pred, average='weighted')
+    recall = recall_score(test_generator.labels, y_test_pred, average='weighted')
+    f1 = f1_score(test_generator.labels, y_test_pred, average='weighted')
+    accuracy = accuracy_score(test_generator.labels, y_test_pred)
+
+    print(f"\n{title}")
+    print("Precision:", precision)
+    print("Recall:", recall)
+    print("F1 Score:", f1)
+    print("Accuracy:", accuracy)
+
+    # Display the confusion matrix
+    confusion = confusion_matrix(test_generator.labels, y_test_pred)
+    confusion_df = pd.DataFrame(confusion, index=classes, columns=classes)
+    print("Confusion Matrix:\n", confusion_df)
+
+# Test the hybrid model on the test set
+evaluate_model(test_generator, hybrid_model, ['bacterial_leaf_blight', 'brown_spot', 'healthy', 'leaf_blast', 'rice_hispa'], title="Performance on Test Data")
+
