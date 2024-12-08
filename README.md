@@ -1,5 +1,12 @@
-<h2> **Paddy Disease Monitoring System 🌾**
-This repository contains the code and documentation for my Final Year Project (FYP): Paddy Disease Monitoring System. The goal of this project is to leverage machine learning and computer vision to assist farmers in identifying paddy diseases early, improving crop yield and reducing losses.
+# 🌾 Paddy Disease Monitoring System
+This repository contains the code and documentation for my Final Year Project (FYP): Paddy Disease Monitoring System.
+
+The goal of this project is to:
+Leverage machine learning and computer vision to assist farmers.
+Identify paddy diseases early, improving crop yield.
+Reduce agricultural losses effectively and efficiently.
+
+
 
 <h2>🚀 Project Highlights</h2>
 🟢 <b>Objective:</b> Develop a mobile application capable of detecting paddy diseases using advanced deep learning models.
