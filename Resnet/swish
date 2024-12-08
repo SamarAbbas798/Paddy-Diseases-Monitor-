@@ -95,3 +95,109 @@ def build_resnet(input_shape=(224, 224, 3), num_classes=5):
 model = build_resnet(num_classes=5)
 model.summary()
 
+
+
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, BatchNormalization, Dropout
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+
+# Define the directory for the dataset
+data_dir = '/content/rice-leaf-diseases-detection-'  # Adjust path if necessary
+
+# Define classes
+classes = ['bacterial_leaf_blight', 'brown_spot', 'healthy', 'leaf_blast', 'Rice Hispa']
+
+# ImageDataGenerators for training, validation, and testing
+train_datagen = ImageDataGenerator(rescale=1./255)
+val_datagen = ImageDataGenerator(rescale=1./255)
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+train_generator = train_datagen.flow_from_directory(
+    os.path.join(data_dir, 'train'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=True
+)
+
+val_generator = val_datagen.flow_from_directory(
+    os.path.join(data_dir, 'val'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+test_generator = test_datagen.flow_from_directory(
+    os.path.join(data_dir, 'test'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+# Define a simple CNN model
+model = Sequential([
+    Conv2D(32, (3, 3), activation='relu', input_shape=(224, 224, 3)),
+    MaxPooling2D((2, 2)),
+    BatchNormalization(),
+
+    Conv2D(64, (3, 3), activation='relu'),
+    MaxPooling2D((2, 2)),
+    BatchNormalization(),
+
+    Conv2D(128, (3, 3), activation='relu'),
+    MaxPooling2D((2, 2)),
+    BatchNormalization(),
+
+    Flatten(),
+    Dense(512, activation='relu'),
+    Dropout(0.5),
+    Dense(len(classes), activation='softmax')  # Number of classes
+])
+
+# Compile the model
+model.compile(optimizer=Adam(learning_rate=0.0001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# Train the model
+history = model.fit(train_generator, epochs=10, validation_data=val_generator)
+
+# Evaluate the model on test data
+def evaluate_model(test_generator, model, classes, title="Performance"):
+    y_test_pred = model.predict(test_generator)
+    y_test_pred = np.argmax(y_test_pred, axis=1)
+
+    precision = precision_score(test_generator.labels, y_test_pred, average='weighted')
+    recall = recall_score(test_generator.labels, y_test_pred, average='weighted')
+    f1 = f1_score(test_generator.labels, y_test_pred, average='weighted')
+    accuracy = accuracy_score(test_generator.labels, y_test_pred)
+
+    print(f"\n{title}")
+    print("Precision:", precision)
+    print("Recall:", recall)
+    print("F1 Score:", f1)
+    print("Accuracy:", accuracy)
+
+    # Confusion matrix
+    confusion = confusion_matrix(test_generator.labels, y_test_pred)
+    confusion_df = pd.DataFrame(confusion, index=classes, columns=classes)
+    print("Confusion Matrix:\n", confusion_df)
+
+    # Plot confusion matrix
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(confusion_df, annot=True, fmt='d', cmap='Blues')
+    plt.title(f'Confusion Matrix: {title}')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.show()
+
+# Evaluate model on the test set
+evaluate_model(test_generator, model, classes, title="Performance on Test Data")
+
