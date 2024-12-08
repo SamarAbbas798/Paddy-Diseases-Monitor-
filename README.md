@@ -26,7 +26,7 @@ Size: 8,000+ images categorized into 5 distinct classes:
 # Brown Spot
 # Healthy
 # Leaf Blast
-# Tungro  
+# Rice Hispa  
 
 
 🧠 Deep Learning Models
