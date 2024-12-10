@@ -120,3 +120,117 @@ def mobilenetv2(input_shape=(224, 224, 3), num_classes=5, alpha=1.0):
 model = mobilenetv2(input_shape=(224, 224, 3), num_classes=5, alpha=1.0)
 model.summary()
 
+# Import required libraries
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+)
+import seaborn as sns
+
+# Define dataset directory
+data_dir = '/content/rice-leaf-diseases-detection-'  # Adjust path as needed
+classes = ['bacterial_leaf_blight', 'brown_spot', 'healthy', 'leaf_blast', 'rice_hispa']
+
+# ImageDataGenerators
+train_datagen = ImageDataGenerator(rescale=1./255)
+val_datagen = ImageDataGenerator(rescale=1./255)
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+# Create data generators
+train_generator = train_datagen.flow_from_directory(
+    os.path.join(data_dir, 'train'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=True
+)
+
+val_generator = val_datagen.flow_from_directory(
+    os.path.join(data_dir, 'val'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+test_generator = test_datagen.flow_from_directory(
+    os.path.join(data_dir, 'test'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+# Define and compile the hybrid model
+model = hybrid_mobilenetv2_inceptionv3(input_shape=(224, 224, 3), num_classes=5, alpha=1.0, leaky_alpha=0.01)
+# Train the hybrid model
+history = model.fit(
+    train_generator,
+    validation_data=val_generator,
+    epochs=50,  # Adjust number of epochs based on dataset size
+    batch_size=32
+)
+
+# Plot training history
+def plot_training_history(history):
+    plt.figure(figsize=(12, 5))
+
+    # Plot loss
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.title('Loss Over Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    # Plot accuracy
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['accuracy'], label='Training Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+    plt.title('Accuracy Over Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+# Call the function to visualize training history
+plot_training_history(history)
+
+# Evaluate the hybrid model on the test set
+def evaluate_model(test_generator, model, classes, title="Performance"):
+    y_test_pred = model.predict(test_generator)
+    y_test_pred = np.argmax(y_test_pred, axis=1)
+
+    precision = precision_score(test_generator.labels, y_test_pred, average='weighted')
+    recall = recall_score(test_generator.labels, y_test_pred, average='weighted')
+    f1 = f1_score(test_generator.labels, y_test_pred, average='weighted')
+    accuracy = accuracy_score(test_generator.labels, y_test_pred)
+
+    print(f"\n{title}")
+    print("Precision:", precision)
+    print("Recall:", recall)
+    print("F1 Score:", f1)
+    print("Accuracy:", accuracy)
+
+    # Confusion matrix
+    confusion = confusion_matrix(test_generator.labels, y_test_pred)
+    confusion_df = pd.DataFrame(confusion, index=classes, columns=classes)
+    print("Confusion Matrix:\n", confusion_df)
+
+    # Plot confusion matrix as heatmap
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(confusion_df, annot=True, fmt='d', cmap='Blues')
+    plt.title(f'Confusion Matrix: {title}')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.show()
+
+# Evaluate the model
+evaluate_model(test_generator, model, classes, title="Hybrid Model Performance on Test Data")
