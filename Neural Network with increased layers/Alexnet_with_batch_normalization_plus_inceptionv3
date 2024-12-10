@@ -32,3 +32,91 @@ if os.path.exists(extracted_path):
     print("Data directory found:", extracted_path)
 else:
     print("Data directory not found. Check if it was extracted to a different path.")
+
+
+import os
+
+# Path of the extracted directory (replace with actual directory if different)
+extracted_dir = '/content/rice-leaf-diseases-detection-'
+
+# Check if directory exists and list its contents
+if os.path.exists(extracted_dir):
+    print(f"Contents of '{extracted_dir}':", os.listdir(extracted_dir))
+else:
+    print(f"Directory '{extracted_dir}' not found.")
+
+
+# Path of the extracted directory (replace with actual directory if different)
+extracted_dir = '/content/rice-leaf-diseases-detection-'
+
+from keras.models import Model
+from keras.layers import Input, Conv2D, DepthwiseConv2D, BatchNormalization, ReLU, GlobalAveragePooling2D, Dense
+
+def mobilenetv2(input_shape=(224, 224, 3), num_classes=5, alpha=1.0):
+    """
+    MobileNetV2 implementation with customizable input shape, number of classes, and width multiplier (alpha).
+
+    Args:
+        input_shape (tuple): Shape of input images (height, width, channels).
+        num_classes (int): Number of output classes.
+        alpha (float): Width multiplier for model scaling.
+
+    Returns:
+        Model: Compiled MobileNetV2 model.
+    """
+    def inverted_residual_block(inputs, expansion, filters, stride, alpha, block_id):
+        """Defines an inverted residual block."""
+        in_channels = inputs.shape[-1]
+        pointwise_filters = int(filters * alpha)
+
+        x = Conv2D(expansion * in_channels, kernel_size=1, padding='same', use_bias=False, name=f"expand_conv_{block_id}")(inputs)
+        x = BatchNormalization(name=f"expand_bn_{block_id}")(x)
+        x = ReLU(6.0, name=f"expand_relu_{block_id}")(x)
+
+        x = DepthwiseConv2D(kernel_size=3, strides=stride, padding='same', use_bias=False, name=f"depthwise_conv_{block_id}")(x)
+        x = BatchNormalization(name=f"depthwise_bn_{block_id}")(x)
+        x = ReLU(6.0, name=f"depthwise_relu_{block_id}")(x)
+
+        x = Conv2D(pointwise_filters, kernel_size=1, padding='same', use_bias=False, name=f"project_conv_{block_id}")(x)
+        x = BatchNormalization(name=f"project_bn_{block_id}")(x)
+
+        if stride == 1 and in_channels == pointwise_filters:
+            x = inputs + x  # Residual connection
+
+        return x
+
+    inputs = Input(shape=input_shape)
+
+    # Initial convolution layer
+    x = Conv2D(int(32 * alpha), kernel_size=3, strides=2, padding='same', use_bias=False, name='conv1')(inputs)
+    x = BatchNormalization(name='conv1_bn')(x)
+    x = ReLU(6.0, name='conv1_relu')(x)
+
+    # Inverted residual blocks
+    x = inverted_residual_block(x, expansion=1, filters=16, stride=1, alpha=alpha, block_id=1)
+    x = inverted_residual_block(x, expansion=6, filters=24, stride=2, alpha=alpha, block_id=2)
+    x = inverted_residual_block(x, expansion=6, filters=24, stride=1, alpha=alpha, block_id=3)
+    x = inverted_residual_block(x, expansion=6, filters=32, stride=2, alpha=alpha, block_id=4)
+    x = inverted_residual_block(x, expansion=6, filters=32, stride=1, alpha=alpha, block_id=5)
+    x = inverted_residual_block(x, expansion=6, filters=32, stride=1, alpha=alpha, block_id=6)
+
+    # Additional blocks can be added here for a complete MobileNetV2 implementation
+
+    # Global Average Pooling
+    x = GlobalAveragePooling2D(name='global_avg_pool')(x)
+
+    # Output layer
+    outputs = Dense(num_classes, activation='softmax', name='output')(x)
+
+    # Build model
+    mobilenetv2_model = Model(inputs=inputs, outputs=outputs, name='MobileNetV2')
+
+    # Compile the model
+    mobilenetv2_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+    return mobilenetv2_model
+
+# Example: Building and summarizing the MobileNetV2 model
+model = mobilenetv2(input_shape=(224, 224, 3), num_classes=5, alpha=1.0)
+model.summary()
+
