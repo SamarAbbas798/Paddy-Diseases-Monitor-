@@ -32,3 +32,73 @@ if os.path.exists(extracted_path):
     print("Data directory found:", extracted_path)
 else:
     print("Data directory not found. Check if it was extracted to a different path.")
+
+
+
+# Path of the extracted directory (replace with actual directory if different)
+extracted_dir = '/content/rice-leaf-diseases-detection-'
+
+
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, Activation, MaxPooling2D, Flatten, Dense, Dropout
+
+def alexnet(input_shape=(224, 224, 3), num_classes=5):
+    inputs = Input(shape=input_shape)
+
+    # 1st Convolutional Layer
+    x = Conv2D(filters=96, kernel_size=(11, 11), strides=(4, 4), padding='valid')(inputs)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)  # ReLU6 activation
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2))(x)
+
+    # 2nd Convolutional Layer
+    x = Conv2D(filters=256, kernel_size=(5, 5), padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)  # ReLU6 activation
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2))(x)
+
+    # 3rd Convolutional Layer
+    x = Conv2D(filters=384, kernel_size=(3, 3), padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)  # ReLU6 activation
+
+    # 4th Convolutional Layer
+    x = Conv2D(filters=384, kernel_size=(3, 3), padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)  # ReLU6 activation
+
+    # 5th Convolutional Layer
+    x = Conv2D(filters=256, kernel_size=(3, 3), padding='same')(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)  # ReLU6 activation
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2))(x)
+
+    # Flatten the output of the last convolutional layer
+    x = Flatten()(x)
+
+    # 1st Fully Connected Layer
+    x = Dense(4096)(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)  # ReLU6 activation
+    x = Dropout(0.5)(x)
+
+    # 2nd Fully Connected Layer
+    x = Dense(4096)(x)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)  # ReLU6 activation
+    x = Dropout(0.5)(x)
+
+    # Output Layer
+    outputs = Dense(num_classes, activation='softmax')(x)
+
+    # Build Model
+    alexnet_model = Model(inputs=inputs, outputs=outputs)
+
+    # Compile the model
+    alexnet_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+    return alexnet_model
+
+# Example: Building and summarizing the AlexNet model
+model = alexnet(input_shape=(224, 224, 3), num_classes=5)
+model.summary()
