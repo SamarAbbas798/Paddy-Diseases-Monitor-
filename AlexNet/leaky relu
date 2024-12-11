@@ -33,3 +33,178 @@ if os.path.exists(extracted_path):
 else:
     print("Data directory not found. Check if it was extracted to a different path.")
 
+# Path of the extracted directory (replace with actual directory if different)
+extracted_dir = '/content/rice-leaf-diseases-detection-'
+
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, Activation, MaxPooling2D, Flatten, Dense, Dropout, LeakyReLU
+
+def alexnet(input_shape=(224, 224, 3), num_classes=5):
+    inputs = Input(shape=input_shape)
+
+    # 1st Convolutional Layer
+    x = Conv2D(filters=96, kernel_size=(11, 11), strides=(4, 4), padding='valid')(inputs)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.1)(x)  # Leaky ReLU activation
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2))(x)
+
+    # 2nd Convolutional Layer
+    x = Conv2D(filters=256, kernel_size=(5, 5), padding='same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.1)(x)  # Leaky ReLU activation
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2))(x)
+
+    # 3rd Convolutional Layer
+    x = Conv2D(filters=384, kernel_size=(3, 3), padding='same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.1)(x)  # Leaky ReLU activation
+
+    # 4th Convolutional Layer
+    x = Conv2D(filters=384, kernel_size=(3, 3), padding='same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.1)(x)  # Leaky ReLU activation
+
+    # 5th Convolutional Layer
+    x = Conv2D(filters=256, kernel_size=(3, 3), padding='same')(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.1)(x)  # Leaky ReLU activation
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2))(x)
+
+    # Flatten the output of the last convolutional layer
+    x = Flatten()(x)
+
+    # 1st Fully Connected Layer
+    x = Dense(4096)(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.1)(x)  # Leaky ReLU activation
+    x = Dropout(0.5)(x)
+
+    # 2nd Fully Connected Layer
+    x = Dense(4096)(x)
+    x = BatchNormalization()(x)
+    x = LeakyReLU(alpha=0.1)(x)  # Leaky ReLU activation
+    x = Dropout(0.5)(x)
+
+    # Output Layer
+    outputs = Dense(num_classes, activation='softmax')(x)
+
+    # Build Model
+    alexnet_model = Model(inputs=inputs, outputs=outputs)
+
+    # Compile the model
+    alexnet_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+    return alexnet_model
+
+# Example: Building and summarizing the AlexNet model
+model = alexnet(input_shape=(224, 224, 3), num_classes=5)
+model.summary()
+
+
+# Required Imports
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+)
+
+# Directory for the dataset
+data_dir = '/content/rice-leaf-diseases-detection-'
+
+# Compile the ReLU6-based AlexNet model
+model.compile(optimizer=Adam(learning_rate=0.0001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# Image Data Generators for Rescaling
+train_datagen = ImageDataGenerator(rescale=1./255)
+val_datagen = ImageDataGenerator(rescale=1./255)
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+# Data generators for training, validation, and testing
+train_generator = train_datagen.flow_from_directory(
+    os.path.join(data_dir, 'train'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=True
+)
+
+val_generator = val_datagen.flow_from_directory(
+    os.path.join(data_dir, 'val'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+test_generator = test_datagen.flow_from_directory(
+    os.path.join(data_dir, 'test'),
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='sparse',
+    shuffle=False
+)
+
+# Train the model
+history = model.fit(train_generator, epochs=40, validation_data=val_generator)
+
+# Plot training and validation results
+plt.figure(figsize=(12, 5))
+
+# Loss plot
+plt.subplot(1, 2, 1)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Loss Over Epochs')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+# Accuracy plot
+plt.subplot(1, 2, 2)
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Accuracy Over Epochs')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+# Helper Function to Evaluate the Model
+def evaluate_model(test_generator, model, classes, title="Performance"):
+    y_test_pred = model.predict(test_generator)
+    y_test_pred = np.argmax(y_test_pred, axis=1)
+
+    precision = precision_score(test_generator.labels, y_test_pred, average='weighted')
+    recall = recall_score(test_generator.labels, y_test_pred, average='weighted')
+    f1 = f1_score(test_generator.labels, y_test_pred, average='weighted')
+    accuracy = accuracy_score(test_generator.labels, y_test_pred)
+
+    print(f"\n{title}")
+    print("Precision:", precision)
+    print("Recall:", recall)
+    print("F1 Score:", f1)
+    print("Accuracy:", accuracy)
+
+    # Confusion Matrix
+    confusion = confusion_matrix(test_generator.labels, y_test_pred)
+    confusion_df = pd.DataFrame(confusion, index=classes, columns=classes)
+    print("Confusion Matrix:\n", confusion_df)
+
+    # Plot Confusion Matrix
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(confusion_df, annot=True, fmt='d', cmap='Blues')
+    plt.title(f'Confusion Matrix: {title}')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.show()
+# Evaluate model on the test set
+evaluate_model(test_generator, model, [
+    'bacterial_leaf_blight', 'brown_spot', 'healthy', 'leaf_blast', 'rice_hispa'], title="Performance on Test Data")
